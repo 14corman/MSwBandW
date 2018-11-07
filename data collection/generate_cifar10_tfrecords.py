@@ -30,6 +30,9 @@ import tarfile
 from six.moves import cPickle as pickle
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
+from PIL import Image
+import numpy as np
+import matplotlib.pyplot as plt
 
 CIFAR_FILENAME = 'cifar-10-python.tar.gz'
 CIFAR_DOWNLOAD_URL = 'https://www.cs.toronto.edu/~kriz/' + CIFAR_FILENAME
@@ -69,29 +72,70 @@ def read_pickle_from_file(filename):
       data_dict = pickle.load(f)
   return data_dict
   
-def read_pickle_from_file_BaW(filename):
+def read_pickle_from_file_BaW(filename, threshold, data_dir):
   with tf.gfile.Open(filename, 'rb') as f:
     if sys.version_info >= (3, 0):
       data_dict = pickle.load(f, encoding='bytes')
     else:
       data_dict = pickle.load(f)
 	  
-	X = data_dict[b"data"] 
-    X = X.reshape(10000, 3, 32, 32).transpose(0,2,3,1).astype("uint8")
+  X = data_dict[b"data"] 
+  labels = data_dict[b"labels"]
+  
+  X = X.reshape(10000, 3, 32, 32).transpose(0,2,3,1).astype("uint8")
+  Y = np.zeros((10000, 32, 32))
     
-    #Visualizing CIFAR 10
-    for j in range(6):
-        for k in range(0, 6, 2):
-            i = np.random.choice(range(len(X)))
-            picture_array = X[i:i+1][0]
-            
-            picture = Image.fromarray(np.array(picture_array), 'RGB')
-            picture = picture.convert('L')
-            binarize_array(np.array(picture), threshold=75)
+  #Visualizing CIFAR 10
+  for i in range(len(X)):
+      
+      picture_array = X[i:i+1][0]
+      picture = Image.fromarray(np.array(picture_array), 'RGB')
+      gray_scale = picture.convert('L')
+      Y[i:i+1][0] = binarize_array(np.array(gray_scale), threshold=threshold)
+      
+      if i % 1000 == 0:
+          f, axarr = plt.subplots(3)
+          
+          title = "%s , threshold= %d out of 255" % (get_label(labels[i]), threshold)
+          f.suptitle(title, fontsize=12)
+                
+          axarr[0].set_axis_off()
+          axarr[0].imshow(picture)
+          axarr[0].set_title("RGB")
+        
+          axarr[1].set_axis_off()
+          axarr[1].imshow(np.array(gray_scale), cmap="gray")
+          axarr[1].set_title("Monochrome")
+         
+          axarr[2].set_axis_off()
+          axarr[2].imshow(Y[i:i+1][0], cmap="gray")
+          axarr[2].set_title("Black and White")
+          
+          # save the figure to file
+          f.savefig("%s\\pictures%d\\%s.png" % (data_dir, threshold, get_label(labels[i])))
+          plt.close(f)
 			
-	data_dict[b"data"] = X
+  data_dict[b"data"] = Y
 			
   return data_dict
+
+def get_label(label):
+    classes = {
+            0: "airplane",
+            1: "car",
+            2: "bird",
+            3: "cat",
+            4: "deer",
+            5: "dog",
+            6: "frog",
+            7: "horse",
+            8: "ship",
+            9: "truck"
+    }
+    
+    invalid = "Number %d is invalid" % (label)
+    return classes.get(label, invalid)
+        
   
 def binarize_array(numpy_array, threshold=200):
     """Binarize a numpy array."""
@@ -121,12 +165,12 @@ def convert_to_tfrecord(input_files, output_file):
             }))
         record_writer.write(example.SerializeToString())
 		
-def convert_to_tfrecord_BaW(input_files, output_file):
+def convert_to_tfrecord_BaW(input_files, output_file, threshold, data_dir):
   """Converts a file to TFRecords."""
   print('Generating %s' % output_file)
   with tf.python_io.TFRecordWriter(output_file) as record_writer:
     for input_file in input_files:
-      data_dict = read_pickle_from_file_BaW(input_file)
+      data_dict = read_pickle_from_file_BaW(input_file, threshold, data_dir)
       data = data_dict[b'data']
       labels = data_dict[b'labels']
       num_entries_in_batch = len(labels)
@@ -154,26 +198,30 @@ def main(data_dir):
     # Convert to tf.train.Example and write the to TFRecords.
     convert_to_tfrecord(input_files, output_file)
 	
-  for mode, files in file_names.items():
-	mode = mode + "BaW"
-	input_files = [os.path.join(input_dir, f) for f in files]
-	output_file = os.path.join(data_dir, mode + '.tfrecords')
-	try:
-	  os.remove(output_file)
-	except OSError:
-	  pass
-	# Convert to tf.train.Example and write the to TFRecords.
-	convert_to_tfrecord_BaW(input_files, output_file)
+    
+  thresholds = [50, 100, 150, 200, 250]
+  for threshold in thresholds: 
+    for mode, files in file_names.items():
+      mode = mode + "BaW" + str(threshold)
+      input_files = [os.path.join(input_dir, f) for f in files]
+      output_file = os.path.join(data_dir, mode + '.tfrecords')
+      try:
+        os.remove(output_file)
+      except OSError:
+        pass
+      # Convert to tf.train.Example and write the to TFRecords.
+      convert_to_tfrecord_BaW(input_files, output_file, threshold, data_dir)
   print('Done!')
 
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser()
-  parser.add_argument(
-      '--data-dir',
-      type=str,
-      default='',
-      help='Directory to download and extract CIFAR-10 to.')
-
-  args = parser.parse_args()
-  main(args.data_dir)
+#  parser = argparse.ArgumentParser()
+#  parser.add_argument(
+#      '--data-dir',
+#      type=str,
+#      default='',
+#      help='Directory to download and extract CIFAR-10 to.')
+#
+#  args = parser.parse_args()
+#  main(args.data_dir)
+    main("..")

@@ -35,10 +35,22 @@ class Cifar10DataSet(object):
     self.use_distortion = use_distortion
 
   def get_filenames(self):
-    if self.subset in ['train', 'validation', 'eval']:
-      return [os.path.join(self.data_dir, self.subset + '.tfrecords')]
-    else:
-      raise ValueError('Invalid data subset "%s"' % self.subset)
+#    if self.subset in ['train', 'validation', 'eval']:
+    return [os.path.join(self.data_dir, self.subset + '.tfrecords')]
+#    else:
+#      raise ValueError('Invalid data subset "%s"' % self.subset)
+    
+  def normalize(self, image):
+    return tf.cast(image, tf.float32) * (1. / 255) - 0.5
+
+  def one_hot_encode(self, label, depth):
+      return tf.one_hot(label, depth)
+    
+  def toBlackAndWhite(self, image):
+      threshold = 150
+      image = tf.image.rgb_to_grayscale(image)
+      image = tf.map_fn(lambda x: tf.map_fn(lambda y: tf.cond(tf.reshape(y, []) > threshold, lambda: 255.0, lambda: 0.0), x), image)
+      return image
 
   def parser(self, serialized_example):
     """Parses a single tf.Example into image and label tensors."""
@@ -52,7 +64,9 @@ class Cifar10DataSet(object):
             'label': tf.FixedLenFeature([], tf.int64),
         })
     image = tf.decode_raw(features['image'], tf.uint8)
+    print("Image shape: ", image.shape)
     image.set_shape([DEPTH * HEIGHT * WIDTH])
+    print("Image reshape: ", image.shape)
 
     # Reshape from [depth * height * width] to [depth, height, width].
     image = tf.cast(
@@ -61,11 +75,17 @@ class Cifar10DataSet(object):
     label = tf.cast(features['label'], tf.int32)
 
     # Custom preprocessing.
-    image = self.preprocess(image)
+    #image = self.preprocess(image)
+    image = self.toBlackAndWhite(image)
+    image = self.normalize(image)
+    image = tf.expand_dims(image, -1)
+    print("Image transpose shape: ", image.shape)
+    
+    label = self.one_hot_encode(label, 10)
 
     return image, label
 
-  def make_batch(self, batch_size):
+  def make_batch(self, batch_size, num_epochs):
     """Read the images and labels from 'filenames'."""
     filenames = self.get_filenames()
     # Repeat infinitely.
@@ -76,7 +96,7 @@ class Cifar10DataSet(object):
         self.parser, num_parallel_calls=batch_size)
 
     # Potentially shuffle records.
-    if self.subset == 'train':
+    if 'train' in self.subset:
       min_queue_examples = int(
           Cifar10DataSet.num_examples_per_epoch(self.subset) * 0.4)
       # Ensure that the capacity is sufficiently large to provide good random
@@ -92,7 +112,7 @@ class Cifar10DataSet(object):
 
   def preprocess(self, image):
     """Preprocess a single image in [height, width, depth] layout."""
-    if self.subset == 'train' and self.use_distortion:
+    if 'train' in self.subset and self.use_distortion:
       # Pad 4 pixels on each dimension of feature map, done in mini-batch
       image = tf.image.resize_image_with_crop_or_pad(image, 40, 40)
       image = tf.random_crop(image, [HEIGHT, WIDTH, DEPTH])
@@ -101,11 +121,11 @@ class Cifar10DataSet(object):
 
   @staticmethod
   def num_examples_per_epoch(subset='train'):
-    if subset == 'train':
+    if 'train' in subset:
       return 45000
-    elif subset == 'validation':
+    elif 'validation' in subset:
       return 5000
-    elif subset == 'eval':
+    elif 'eval' in subset:
       return 10000
     else:
       raise ValueError('Invalid data subset "%s"' % subset)

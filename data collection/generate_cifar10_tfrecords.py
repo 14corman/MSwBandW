@@ -83,18 +83,22 @@ def read_pickle_from_file_BaW(filename, threshold, data_dir):
   labels = data_dict[b"labels"]
   
   X = X.reshape(10000, 3, 32, 32).transpose(0,2,3,1).astype("uint8")
-  Y = np.zeros((10000, 32, 32))
+  Y = np.zeros((10000, 32, 32, 1))
     
   #Visualizing CIFAR 10
   for i in range(len(X)):
       
       picture_array = X[i:i+1][0]
+      print("picture_array: ", np.array(picture_array).shape)
       picture = Image.fromarray(np.array(picture_array), 'RGB')
+      print("picture: ", np.array(picture).shape)
       gray_scale = picture.convert('L')
-      Y[i:i+1][0] = binarize_array(np.array(gray_scale), threshold=threshold)
+      print("gray_scale: ", np.array(gray_scale).shape)
+      Y[i:i+1][0] = np.expand_dims(binarize_array(np.array(gray_scale), threshold=threshold), axis=-1)
+      print("after: ", Y[i:i+1][0].shape)
       
       if i % 1000 == 0:
-          f, axarr = plt.subplots(3)
+          f, axarr = plt.subplots(2)
           
           title = "%s , threshold= %d out of 255" % (get_label(labels[i]), threshold)
           f.suptitle(title, fontsize=12)
@@ -107,9 +111,9 @@ def read_pickle_from_file_BaW(filename, threshold, data_dir):
           axarr[1].imshow(np.array(gray_scale), cmap="gray")
           axarr[1].set_title("Monochrome")
          
-          axarr[2].set_axis_off()
-          axarr[2].imshow(Y[i:i+1][0], cmap="gray")
-          axarr[2].set_title("Black and White")
+#          axarr[2].set_axis_off()
+#          axarr[2].imshow(Y[i:i+1][0])
+#          axarr[2].set_title("Black and White")
           
           # save the figure to file
           f.savefig("%s\\pictures%d\\%s.png" % (data_dir, threshold, get_label(labels[i])))
@@ -188,18 +192,18 @@ def main(data_dir):
   download_and_extract(data_dir)
   file_names = _get_file_names()
   input_dir = os.path.join(data_dir, CIFAR_LOCAL_FOLDER)
-  for mode, files in file_names.items():
-    input_files = [os.path.join(input_dir, f) for f in files]
-    output_file = os.path.join(data_dir, mode + '.tfrecords')
-    try:
-      os.remove(output_file)
-    except OSError:
-      pass
-    # Convert to tf.train.Example and write the to TFRecords.
-    convert_to_tfrecord(input_files, output_file)
+#  for mode, files in file_names.items():
+#    input_files = [os.path.join(input_dir, f) for f in files]
+#    output_file = os.path.join(data_dir, mode + '.tfrecords')
+#    try:
+#      os.remove(output_file)
+#    except OSError:
+#      pass
+#    # Convert to tf.train.Example and write the to TFRecords.
+#    convert_to_tfrecord(input_files, output_file)
 	
     
-  thresholds = [50, 100, 150, 200, 250]
+  thresholds = [150]
   for threshold in thresholds: 
     for mode, files in file_names.items():
       mode = mode + "BaW" + str(threshold)
@@ -224,4 +228,4 @@ if __name__ == '__main__':
 #
 #  args = parser.parse_args()
 #  main(args.data_dir)
-    main("..")
+    main("../..")
